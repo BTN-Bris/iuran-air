@@ -1356,21 +1356,28 @@
         }
 
         // 2. Fungsi utama penarik data dari server
-        function loadDashboard(bulan, tahun) {
+        async function loadDashboard(bulan, tahun) {
             if (!tahun) tahun = document.getElementById('filter-tahun-dash').value;
             if (!bulan) bulan = document.getElementById('filter-bulan-dash').value;
 
-            google.script.run
-            .withSuccessHandler(function(data) {
+            try {
+                // Memanggil API Github
+                const response = await fetch(`${API_URL}?action=getDashboardData&bulan=${bulan}&tahun=${tahun}`);
+                const data = await response.json();
+
+                // Cek jika ada error dari server
+                if (data.success === false) {
+                    throw new Error(data.message);
+                }
+
                 // Update Saldo & KPI
-                window.currentSaldoAwal = data.saldoAwal || 0; // <--- TAMBAHKAN BARIS INI
+                window.currentSaldoAwal = data.saldoAwal || 0; 
                 document.getElementById('val-saldo').innerText = formatRp(data.saldoKas);
                 
                 if (document.getElementById('val-rumah-aktif')) {
                     document.getElementById('val-rumah-aktif').innerText = data.totalRumah;
                     
                     // --- LOGIKA BARU: PROGRESS BAR RUMAH AKTIF ---
-                    // Mengambil total fisik rumah dari server untuk menghitung persentase
                     let totalFisik = data.totalFisik || 165; 
                     let pctAktif = Math.round((data.totalRumah / totalFisik) * 100);
                     
@@ -1398,7 +1405,6 @@
                 document.getElementById('sby-pct').innerText = data.persentaseBayar + '%';
                 document.getElementById('bby-pct').innerText = data.persentaseBelum + '%';
 
-
                 // === PERBAIKAN: Update teks periode pada kartu Pemasukan & Pengeluaran ===
                 const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
                 
@@ -1419,12 +1425,12 @@
                 allTrxData = data.allTransactions || []; 
                 renderTable('table-body', allTrxData.slice(0, 5));
                 setupFilterBulan();
-            })
-            .withFailureHandler(function(err) {
+
+            } catch (err) {
                 // Jika error di server, tampilkan pesan peringatan di tabel
+                console.error("Gagal memuat dashboard:", err);
                 document.getElementById('table-body').innerHTML = '<tr><td colspan="5" class="text-center py-6 text-rose-500 font-bold"><i class="fa-solid fa-triangle-exclamation text-2xl mb-2"></i><br>Gagal memuat: ' + err.message + '</td></tr>';
-            })
-            .getDashboardData(bulan, tahun);
+            }
             
             loadDashboardBankList();
         }
@@ -1432,56 +1438,63 @@
         // ==========================================
         // FUNGSI LOAD REKENING KORAN (DASHBOARD PUBLIK)
         // ==========================================
-        function loadDashboardBankList() {
+        async function loadDashboardBankList() {
             const container = document.getElementById('dash-bank-list');
             if(!container) return;
             
-            google.script.run
-                .withSuccessHandler(function(res) {
-                    container.innerHTML = '';
-                    if(res.success && res.data.length > 0) {
-                        // Tampilkan semua data dari yang terbaru
-                        res.data.forEach(item => {
-                            container.innerHTML += `
-                                <div class="flex items-center justify-between p-3 bg-white hover:bg-slate-50 transition-colors rounded-xl border border-slate-100 group shadow-sm hover:shadow-md">
-                                    <div class="flex items-center gap-3 overflow-hidden">
-                                        <!-- Warna ikon langsung disamakan dengan tema biru lembut aplikasi -->
-                                        <div class="w-9 h-9 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center shrink-0">
-                                            <i class="fa-solid fa-file-pdf"></i>
-                                        </div>
-                                        <div class="truncate">
-                                            <p class="text-xs font-bold text-slate-700 truncate">${item.periode}</p>
-                                            <p class="text-[10px] text-slate-400 truncate">${item.keterangan || 'Rekening Koran'}</p>
-                                        </div>
+            try {
+                // Panggil data bank dari API
+                const response = await fetch(`${API_URL}?action=getBuktiBankData`);
+                const res = await response.json();
+                
+                container.innerHTML = '';
+                
+                if(res.success && res.data && res.data.length > 0) {
+                    // Tampilkan semua data dari yang terbaru
+                    res.data.forEach(item => {
+                        container.innerHTML += `
+                            <div class="flex items-center justify-between p-3 bg-white hover:bg-slate-50 transition-colors rounded-xl border border-slate-100 group shadow-sm hover:shadow-md">
+                                <div class="flex items-center gap-3 overflow-hidden">
+                                    <div class="w-9 h-9 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center shrink-0">
+                                        <i class="fa-solid fa-file-pdf"></i>
                                     </div>
-                                    <!-- Efek hover pada tombol dibuat lebih halus (soft blending) -->
-                                    <a href="${item.link}" target="_blank" class="w-8 h-8 rounded-full bg-slate-50 text-slate-400 hover:bg-blue-100 hover:text-blue-600 flex items-center justify-center shrink-0 transition-colors" title="Lihat Dokumen">
-                                        <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
-                                    </a>
+                                    <div class="truncate">
+                                        <p class="text-xs font-bold text-slate-700 truncate">${item.periode}</p>
+                                        <p class="text-[10px] text-slate-400 truncate">${item.keterangan || 'Rekening Koran'}</p>
+                                    </div>
                                 </div>
-                            `;
-                        });
-                    } else {
-                        container.innerHTML = `<div class="text-center py-8 text-slate-400 text-xs font-medium bg-slate-50 rounded-xl border border-dashed border-slate-200">Belum ada dokumen rekening koran.</div>`;
-                    }
-                })
-                .withFailureHandler(function(err) {
-                    container.innerHTML = `<div class="text-center py-6 text-rose-500 text-xs font-bold">Error: ${err.message}</div>`;
-                })
-                .getBuktiBankData();
+                                <a href="${item.link}" target="_blank" class="w-8 h-8 rounded-full bg-slate-50 text-slate-400 hover:bg-blue-100 hover:text-blue-600 flex items-center justify-center shrink-0 transition-colors" title="Lihat Dokumen">
+                                    <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                                </a>
+                            </div>
+                        `;
+                    });
+                } else {
+                    container.innerHTML = `<div class="text-center py-8 text-slate-400 text-xs font-medium bg-slate-50 rounded-xl border border-dashed border-slate-200">Belum ada dokumen rekening koran.</div>`;
+                }
+            } catch (error) {
+                console.error("Gagal memuat daftar bank:", error);
+                container.innerHTML = `<div class="text-center py-6 text-rose-500 text-xs font-bold">Gagal memuat dokumen bank.</div>`;
+            }
         }
 
         // === UPDATE CHART 12 BULAN ===
-        function updateBarChart() {
+        async function updateBarChart() {
             const tahun = document.getElementById('tahun-chart').value;
-            google.script.run.withSuccessHandler(function(data) {
+            
+            try {
+                const response = await fetch(`${API_URL}?action=getYearlyChartData&tahun=${tahun}`);
+                const data = await response.json();
+                
                 // Update dataset 1 (Pemasukan) dengan array 12 angka
                 barChart.data.datasets[0].data = data.pemasukanBulan;
                 // Update dataset 2 (Pengeluaran) dengan array 12 angka
                 barChart.data.datasets[1].data = data.pengeluaranBulan;
                 // Perbarui chart
                 barChart.update();
-            }).getYearlyChartData(tahun);
+            } catch (error) {
+                console.error("Gagal memperbarui grafik:", error);
+            }
         }
 
         function renderTable(elementId, transactions) {
@@ -1870,7 +1883,7 @@
         function openModal() { const modal = document.getElementById('trx-modal'); modal.classList.remove('hidden'); modal.classList.add('flex'); document.body.style.overflow = 'hidden'; applyFilter(); }
         function closeModal() { const modal = document.getElementById('trx-modal'); modal.classList.add('hidden'); modal.classList.remove('flex'); document.body.style.overflow = 'auto'; }
 
-        function searchData() {
+        async function searchData() {
             const no = document.getElementById('input-norumah').value;
             if(!no) { showNotification("Peringatan", "Masukkan nomor rumah!", "warning"); return; }
             
@@ -1882,7 +1895,7 @@
                 <tr>
                     <td colspan="5" class="text-center py-10">
                         <i class="fa-solid fa-circle-notch fa-spin text-blue-500 text-3xl mb-3"></i>
-                        <br><span class="text-sm font-medium text-slate-500">Menarik data dari Spreadsheet...</span>
+                        <br><span class="text-sm font-medium text-slate-500">Menarik data dari server...</span>
                     </td>
                 </tr>
             `;
@@ -1909,8 +1922,11 @@
             document.getElementById('res-waktu-berjalan').innerHTML = skeletonText;
             document.getElementById('res-metode-berjalan').innerHTML = skeletonText;
             
-            // 2. PROSES PANGGILAN BACKEND
-            google.script.run.withSuccessHandler(function(res) {
+            // 2. PROSES PANGGILAN API BACKEND
+            try {
+                const response = await fetch(`${API_URL}?action=searchStatus&noRumah=${no}`);
+                const res = await response.json();
+
                 if(res.error) {
                     showNotification("Error", res.error, "error");
                     document.getElementById('result-area').style.display = 'none';
@@ -1980,7 +1996,6 @@
                     document.getElementById('status-text').innerText = "LUNAS";
                     document.getElementById('status-bulan').innerText = currentBulan;
                     
-                    // Gunakan innerHTML agar tag HTML dari pesanTunggakan terbaca
                     document.getElementById('status-msg').innerHTML = "Terima kasih, pembayaran Anda sudah lunas." + pesanTunggakan;
                     document.getElementById('status-msg').className = "text-sm text-emerald-700 font-medium";
 
@@ -2001,7 +2016,6 @@
                     document.getElementById('status-text').innerText = "BELUM BAYAR";
                     document.getElementById('status-bulan').innerText = currentBulan;
                     
-                    // Gunakan innerHTML agar tag HTML dari pesanTunggakan terbaca
                     document.getElementById('status-msg').innerHTML = "Segera lakukan pembayaran untuk bulan ini." + pesanTunggakan;
                     document.getElementById('status-msg').className = "text-sm text-rose-700 font-medium";
 
@@ -2013,7 +2027,11 @@
                     document.getElementById('res-metode-berjalan').innerText = "-";
                 }
 
-            }).searchStatus(no);
+            } catch (error) {
+                console.error("Error menarik data:", error);
+                showNotification("Error", "Gagal menghubungi server", "error");
+                document.getElementById('result-area').style.display = 'none';
+            }
         }
 
         function openLoginModal() { const modal = document.getElementById('login-modal'); modal.classList.remove('hidden'); modal.classList.add('flex'); document.body.style.overflow = 'hidden'; document.getElementById('login-error').classList.add('hidden'); document.getElementById('login-username').value = ''; document.getElementById('login-password').value = ''; }
@@ -2022,24 +2040,27 @@
         // ==========================================
         // FUNGSI LOAD PENGUMUMAN TAHUNAN
         // ==========================================
-        function loadPengumuman() {
+        async function loadPengumuman() {
             const tahun = document.getElementById('pengumuman-tahun').value;
             const tbody = document.getElementById('pengumuman-table-body');
             
             tbody.innerHTML = `<tr><td colspan="13" class="text-center py-12"><i class="fa-solid fa-circle-notch fa-spin text-blue-600 text-3xl mb-3"></i><br><span class="text-slate-500 font-medium">Merekap data 12 bulan...</span></td></tr>`;
             
-            google.script.run
-                .withSuccessHandler(function(res) {
-                    if (res.success) { 
-                        window.pengumumanData = res.data; // <--- SIMPAN DATA KE MEMORI UNTUK PDF
-                        renderTabelPengumuman(res.data); 
-                    } 
-                    else { tbody.innerHTML = `<tr><td colspan="13" class="text-center py-6 text-rose-500 font-bold">Gagal memuat: ${res.message}</td></tr>`; }
-                })
-                .withFailureHandler(function(err) {
-                    tbody.innerHTML = `<tr><td colspan="13" class="text-center py-6 text-rose-500 font-bold">Error: ${err.message}</td></tr>`;
-                })
-                .getPengumumanData(tahun);
+            try {
+                const response = await fetch(`${API_URL}?action=getPengumumanData&tahun=${tahun}`);
+                const res = await response.json();
+
+                if (res.success) { 
+                    window.pengumumanData = res.data; // <--- SIMPAN DATA KE MEMORI UNTUK PDF
+                    renderTabelPengumuman(res.data); 
+                } 
+                else { 
+                    tbody.innerHTML = `<tr><td colspan="13" class="text-center py-6 text-rose-500 font-bold">Gagal memuat: ${res.message}</td></tr>`; 
+                }
+            } catch (error) {
+                console.error("Gagal load pengumuman:", error);
+                tbody.innerHTML = `<tr><td colspan="13" class="text-center py-6 text-rose-500 font-bold">Error jaringan: Gagal terhubung ke server.</td></tr>`;
+            }
         }
 
         function renderTabelPengumuman(data) {
@@ -2432,23 +2453,27 @@
             fieldNama.value = 'Mencari...';
             
             // Tunggu 500 milidetik (0.5 detik) setelah user berhenti mengetik, baru panggil server
-            timerCariRumah = setTimeout(function() {
-                google.script.run
-                    .withSuccessHandler(function(res) {
-                        if (res && res.nama) {
-                            fieldNama.value = res.nama;
-                        } else {
-                            fieldNama.value = 'Data tidak ditemukan';
-                        }
-                    })
-                    .withFailureHandler(function(err) {
-                        fieldNama.value = 'Gagal mencari data';
-                    })
-                    .getDataRumah(noRumah);
-            }, 500); 
+            timerCariRumah = setTimeout(async function() {
+                try {
+                    // Gunakan Fetch untuk memanggil API
+                    const response = await fetch(`${API_URL}?action=getDataRumah&noRumah=${noRumah}`);
+                    const res = await response.json(); // Ubah balasan server jadi Javascript
+                    
+                    if (res && res.nama) {
+                        fieldNama.value = res.nama;
+                    } else {
+                        fieldNama.value = 'Data tidak ditemukan';
+                    }
+                } catch (error) {
+                    fieldNama.value = 'Gagal mencari data';
+                    console.error("Error dari API:", error);
+                }
+            }, 500);
         }
 
+        // ==========================================
         // Simpan Transaksi Baru (Dengan Upload Bukti)
+        // ==========================================
         function simpanTransaksiBaru() {
             const nominal = document.getElementById('inp-nominal').value;
             const tanggal = document.getElementById('inp-tanggal').value;
@@ -2481,19 +2506,19 @@
                 const reader = new FileReader();
                 
                 reader.onload = function(e) {
-                    // Hapus prefix "data:image/jpeg;base64," agar murni base64
                     const base64String = e.target.result.split(',')[1];
                     fileData = base64String;
                     sendDataToServer(fileData, fileName);
                 };
                 reader.readAsDataURL(file);
             } else {
-                // Jika tidak ada file, langsung kirim
                 sendDataToServer(null, null);
             }
 
-            function sendDataToServer(fileBase64, fileNama) {
+            // Menggunakan async/await dan POST method
+            async function sendDataToServer(fileBase64, fileNama) {
                 const dataTransaksi = {
+                    action: 'submitNewTransaction', // Disisipkan langsung di dalam data
                     tanggal: tanggal,
                     jenis: jenis,
                     kategori: kategori,
@@ -2503,34 +2528,35 @@
                     keterangan: keterangan + rentangBulan,
                     fileData: fileBase64,
                     fileName: fileNama,
-                    // === PERBAIKAN PENTING: KIRIM BULAN AWAL & AKHIR ===
                     bulanAwal: document.getElementById('inp-bulan-awal').value,
                     bulanAkhir: document.getElementById('inp-bulan-akhir').value
                 };
 
                 const btn = document.querySelector('#trx-input-modal button.bg-blue-600');
                 const originalText = btn.innerHTML;
-                btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Menyimpan...';
+                btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Menyimpan...';
                 btn.disabled = true;
 
-                google.script.run
-                    .withSuccessHandler(function(res) {
-                        if (res.success) {
-                            showNotification("Berhasil", "Transaksi berhasil disimpan!", "success");
-                            closeAddTransactionModal();
-                            loadAdminBukuKas(); 
-                        } else {
-                            showNotification("Gagal", "Gagal menyimpan: " + res.message, "error");
-                        }
-                        btn.innerHTML = originalText;
-                        btn.disabled = false;
-                    })
-                    .withFailureHandler(function(err) {
-                        showNotification("Koneksi Error", "Error koneksi: " + err.message, "error");
-                        btn.innerHTML = originalText;
-                        btn.disabled = false;
-                    })
-                    .submitNewTransaction(dataTransaksi);
+                try {
+                    const response = await fetch(API_URL, {
+                        method: 'POST',
+                        body: JSON.stringify(dataTransaksi)
+                    });
+                    const res = await response.json();
+
+                    if (res.success) {
+                        showNotification("Berhasil", "Transaksi berhasil disimpan!", "success");
+                        closeAddTransactionModal();
+                        loadAdminBukuKas(); 
+                    } else {
+                        showNotification("Gagal", "Gagal menyimpan: " + res.message, "error");
+                    }
+                } catch (err) {
+                    showNotification("Koneksi Error", "Error koneksi: " + err.message, "error");
+                } finally {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                }
             }
         }
 
@@ -2633,20 +2659,23 @@
             
             fieldNama.value = 'Mencari...';
             
-            timerCariRumahEdit = setTimeout(function() {
-                google.script.run
-                    .withSuccessHandler(function(res) {
-                        fieldNama.value = res.nama || 'Data tidak ditemukan';
-                    })
-                    .withFailureHandler(function(err) {
-                        fieldNama.value = 'Gagal mencari data';
-                    })
-                    .getDataRumah(noRumah);
+            timerCariRumahEdit = setTimeout(async function() {
+                try {
+                    const response = await fetch(`${API_URL}?action=getDataRumah&noRumah=${noRumah}`);
+                    const res = await response.json();
+                    
+                    fieldNama.value = res.nama || 'Data tidak ditemukan';
+                } catch (error) {
+                    fieldNama.value = 'Gagal mencari data';
+                    console.error("Error dari API:", error);
+                }
             }, 500);
         }
 
+        // ==========================================
         // KIRIM UPDATE KE SERVER (DENGAN NOTIFIKASI MODAL ELEGAN)
-        function updateTransaksi() {
+        // ==========================================
+        async function updateTransaksi() {
             const idInduk = document.getElementById('edit-id-induk').value;
             const nominal = document.getElementById('edit-nominal').value;
             const tanggal = document.getElementById('edit-tanggal').value;
@@ -2662,6 +2691,7 @@
             const keterangan = document.getElementById('edit-keterangan').value;
 
             const dataTransaksi = {
+                action: 'updateTransaction', // Disisipkan langsung di dalam data
                 idInduk: idInduk,
                 tanggal: tanggal,
                 jenis: jenis,
@@ -2676,30 +2706,33 @@
 
             const btn = document.querySelector('#trx-edit-modal button.bg-blue-600');
             const originalText = btn.innerHTML;
-            btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Mengupdate...';
+            btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Mengupdate...';
             btn.disabled = true;
 
-            google.script.run
-                .withSuccessHandler(function(res) {
-                    if (res.success) {
-                        showNotification("Berhasil", "Transaksi berhasil diperbarui!", "success");
-                        closeEditTransactionModal();
-                        loadAdminBukuKas(); 
-                    } else {
-                        showNotification("Gagal", "Gagal memperbarui: " + res.message, "error");
-                    }
-                    btn.innerHTML = originalText;
-                    btn.disabled = false;
-                })
-                .withFailureHandler(function(err) {
-                    showNotification("Koneksi Error", "Error koneksi: " + err.message, "error");
-                    btn.innerHTML = originalText;
-                    btn.disabled = false;
-                })
-                .updateTransaction(dataTransaksi);
+            try {
+                // Gunakan POST juga agar lebih aman
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify(dataTransaksi)
+                });
+                const res = await response.json();
+
+                if (res.success) {
+                    showNotification("Berhasil", "Transaksi berhasil diperbarui!", "success");
+                    closeEditTransactionModal();
+                    loadAdminBukuKas(); 
+                } else {
+                    showNotification("Gagal", "Gagal memperbarui: " + res.message, "error");
+                }
+            } catch (err) {
+                showNotification("Koneksi Error", "Error koneksi: " + err.message, "error");
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
         }
 
-        function submitLogin() {
+        async function submitLogin() {
             const user = document.getElementById('login-username').value;
             const pass = document.getElementById('login-password').value;
             const errBox = document.getElementById('login-error');
@@ -2716,42 +2749,40 @@
             btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Memverifikasi...';
             btn.disabled = true;
 
-            google.script.run
-                .withSuccessHandler(function(res) {
-                    if (res.success) {
-                        closeLoginModal();
-                        document.querySelector('header').style.display = 'none';
-                        document.getElementById('page-dashboard').classList.add('hidden');
-                        document.getElementById('page-cek-status').classList.add('hidden');
-                        document.getElementById('page-pengumuman').classList.add('hidden');
-                        
-                        const adminPage = document.getElementById('page-admin-dashboard');
-                        if (adminPage) {
-                            adminPage.classList.remove('hidden');
-                            
-                            // === DI SINI LETAKNYA: SIMPAN DATA LOGIN KE SESSIONSTORAGE ===
-                            sessionStorage.setItem('admin_login_time', Date.now());
-                            sessionStorage.setItem('admin_nama', res.admin.nama);
-                            sessionStorage.setItem('admin_jabatan', res.admin.jabatan);
-                        }
-                        
-                        document.getElementById('admin-name-display').innerText = res.admin.nama;
-                        document.getElementById('admin-role-display').innerText = res.admin.jabatan;
-                        loadAdminBukuKas();
-                    } else {
-                        errBox.innerText = res.message;
-                        errBox.classList.remove('hidden');
-                        btn.innerHTML = originalText;
-                        btn.disabled = false;
+            try {
+                const response = await fetch(`${API_URL}?action=verifyAdminLogin&user=${encodeURIComponent(user)}&pass=${encodeURIComponent(pass)}`);
+                const res = await response.json();
+
+                if (res.success) {
+                    closeLoginModal();
+                    document.querySelector('header').style.display = 'none';
+                    document.getElementById('page-dashboard').classList.add('hidden');
+                    document.getElementById('page-cek-status').classList.add('hidden');
+                    document.getElementById('page-pengumuman').classList.add('hidden');
+                    
+                    const adminPage = document.getElementById('page-admin-dashboard');
+                    if (adminPage) {
+                        adminPage.classList.remove('hidden');
+                        sessionStorage.setItem('admin_login_time', Date.now());
+                        sessionStorage.setItem('admin_nama', res.admin.nama);
+                        sessionStorage.setItem('admin_jabatan', res.admin.jabatan);
                     }
-                })
-                .withFailureHandler(function(err) {
-                    errBox.innerText = "Koneksi ke server terputus: " + err.message;
+                    
+                    document.getElementById('admin-name-display').innerText = res.admin.nama;
+                    document.getElementById('admin-role-display').innerText = res.admin.jabatan;
+                    loadAdminBukuKas();
+                } else {
+                    errBox.innerText = res.message;
                     errBox.classList.remove('hidden');
                     btn.innerHTML = originalText;
                     btn.disabled = false;
-                })
-                .verifyAdminLogin(user, pass);
+                }
+            } catch (err) {
+                errBox.innerText = "Koneksi ke server terputus: " + err.message;
+                errBox.classList.remove('hidden');
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
         }
 
         // ==========================================
@@ -2760,64 +2791,48 @@
         function logoutAdmin(btn) {
             let originalText = '';
             
-            // 1. Jika diklik melalui tombol, ubah jadi efek loading
             if (btn) {
                 originalText = btn.innerHTML;
                 btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Memproses...';
                 btn.disabled = true;
             }
 
-            // 2. Beri jeda animasi selama 600 milidetik (0.6 detik)
             setTimeout(() => {
-                // Hapus semua data sessionStorage
                 sessionStorage.removeItem('admin_login_time');
                 sessionStorage.removeItem('admin_nama');
                 sessionStorage.removeItem('admin_jabatan');
 
-                // Tampilkan header publik kembali ke format asli
                 document.querySelector('header').style.display = ''; 
-                
-                // Sembunyikan halaman admin
                 document.getElementById('page-admin-dashboard').classList.add('hidden');
                 
-                // Pindah ke dashboard publik dan muat ulang data
                 switchPage('dashboard');
                 loadDashboard();
 
-                // Kembalikan bentuk tombol seperti semula (jaga-jaga jika login lagi)
                 if (btn) {
                     btn.innerHTML = originalText;
                     btn.disabled = false;
-                    // Tampilkan notifikasi berhasil logout
                     showNotification("Berhasil Keluar", "Sesi admin telah ditutup dengan aman.", "success");
                 }
-            }, 600); // Durasi jeda animasi
+            }, 600); 
         }
 
         function resetSessionTimer() {
             const adminPage = document.getElementById('page-admin-dashboard');
-            // Hanya reset jika sedang dalam mode admin
             if (adminPage && !adminPage.classList.contains('hidden')) {
-                sessionStorage.setItem('admin_login_time', Date.now()); // Gunakan sessionStorage
+                sessionStorage.setItem('admin_login_time', Date.now());
             }
         }
 
         // ==================== ADMIN BUKU KAS ====================
-        function loadAdminBukuKas() {
+        async function loadAdminBukuKas() {
             const tbody = document.getElementById('adm-table-body');
             if(tbody) {
-                // === PERBAIKAN INTERAKTIF: Tampilkan Spinner + Skeleton Loading ===
                 tbody.innerHTML = `
                     <tr>
                         <td colspan="8" class="text-center py-10">
                             <div class="flex flex-col items-center justify-center space-y-4">
-                                <!-- Spinner Berputar -->
                                 <i class="fa-solid fa-circle-notch fa-spin text-blue-600 text-4xl"></i>
-                                
-                                <!-- Teks Loading -->
-                                <span class="text-sm font-medium text-slate-600">Sedang mengambil data dari Spreadsheet...</span>
-                                
-                                <!-- Skeleton Loading (Garis abu-abu berkedip) -->
+                                <span class="text-sm font-medium text-slate-600">Sedang mengambil data dari server...</span>
                                 <div class="w-full max-w-lg space-y-2 mt-2">
                                     <div class="h-3 bg-slate-100 rounded-full w-full animate-pulse"></div>
                                     <div class="h-3 bg-slate-100 rounded-full w-5/6 animate-pulse"></div>
@@ -2829,24 +2844,25 @@
                 `;
             }
             
-            google.script.run.withSuccessHandler(function(res) {
+            try {
+                const response = await fetch(`${API_URL}?action=getBukuKasData`);
+                const res = await response.json();
+
                 if(res && res.success) {
                     adminTrxData = res.data || [];
-                    
-                    // === PERBAIKAN: Isi dropdown tahun dinamis ===
                     populateAdminYearDropdown(); 
                     
                     if(adminTrxData.length === 0) {
-                        if(tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-slate-400">⚠️ Data transaksi di Spreadsheet kosong (0 baris).<br><span class="text-xs">Pastikan sheet 'Transaksi' memiliki data dan kolom Tanggal berformat <b>DD/MM/YYYY</b> (contoh: 01/08/2026).</span></td></tr>`;
+                        if(tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-slate-400"> Data transaksi kosong.</td></tr>`;
                         return;
                     }
                     renderAdminTable(); 
                 } else {
-                    if(tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-rose-500 font-bold">❌ Gagal memuat data: ${res ? res.message : 'Server mengirim respon kosong'}</td></tr>`;
+                    if(tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-rose-500 font-bold"> Gagal memuat data: ${res ? res.message : 'Server error'}</td></tr>`;
                 }
-            }).withFailureHandler(function(err) {
-                if(tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-rose-500 font-bold">⚠️ Error koneksi: ${err.message}</td></tr>`;
-            }).getBukuKasData();
+            } catch (err) {
+                if(tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-rose-500 font-bold"> Error koneksi: ${err.message}</td></tr>`;
+            }
         }
 
         function renderAdminTable() {
@@ -2858,7 +2874,6 @@
             const selectedYear = tahunEl ? tahunEl.value : "2026";
             const selectedJenis = jenisEl ? jenisEl.value : "all";
 
-            // === TAMBAHKAN 3 BARIS INI UNTUK UPDATE TEKS SALDO AWAL ===
             const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
             if (document.getElementById('adm-ket-awal')) {
                 document.getElementById('adm-ket-awal').innerText = `Per 01 ${monthNames[parseInt(selectedMonth)-1]} ${selectedYear}`;
@@ -2868,10 +2883,8 @@
             if(!tbody) return;
             tbody.innerHTML = '';
 
-            // Jika data transaksi kosong, reset kartu menjadi 0
             if(!adminTrxData || adminTrxData.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="9" class="text-center py-6 text-slate-400">Belum ada data transaksi di Spreadsheet.</td></tr>`;
-                // Reset kartu ringkasan
+                tbody.innerHTML = `<tr><td colspan="9" class="text-center py-6 text-slate-400">Belum ada data transaksi.</td></tr>`;
                 if(document.getElementById('adm-saldo-awal')) document.getElementById('adm-saldo-awal').innerText = 'Rp 0';
                 if(document.getElementById('adm-total-masuk')) document.getElementById('adm-total-masuk').innerText = 'Rp 0';
                 if(document.getElementById('adm-total-keluar')) document.getElementById('adm-total-keluar').innerText = 'Rp 0';
@@ -2879,15 +2892,12 @@
                 return;
             }
 
-            // === LOGIKA GROUPING ID INDUK (.1, .2, .3) UNTUK TABEL ADMIN ===
             const groupedData = {};
             
             adminTrxData.forEach(trx => {
-                // 1. Cari ID induk
                 let parentId = trx.noBukti || 'TRX-0000';
                 if (parentId.includes('.')) parentId = parentId.split('.')[0];
 
-                // 2. Kelompokkan berdasarkan ID induk
                 if (!groupedData[parentId]) {
                     groupedData[parentId] = {
                         noBukti: parentId,
@@ -2913,24 +2923,20 @@
                 groupedData[parentId].totalPengeluaran += trx.pengeluaran || 0;
             });
 
-            // Filter berdasarkan jenis (harus dilakukan pada GROUP)
             let filteredGroups = Object.values(groupedData);
             if (selectedJenis !== 'all') {
                 filteredGroups = filteredGroups.filter(g => g.jenis.toLowerCase() === selectedJenis.toLowerCase());
             }
-            // Filter bulan & tahun secara manual pada tanggal group
             filteredGroups = filteredGroups.filter(g => {
                 const parts = g.tanggal.split('/');
                 if (parts.length !== 3) return false;
                 return (parts[1] === selectedMonth && parts[2] === selectedYear);
             });
 
-            // === HITUNG SALDO BERJALAN & RENDER ===
             let runningSaldo = 0;
             let saldoAwal = 0;
             let totalMasuk = 0, totalKeluar = 0;
 
-            // 1. Hitung Saldo Awal (semua transaksi SEBELUM bulan dan tahun terpilih)
             let tempSaldo = 0;
             adminTrxData.forEach(trx => {
                 const parts = String(trx.tanggal).split('/');
@@ -2943,16 +2949,13 @@
                 }
             });
             
-            // === PERBAIKAN PENTING DI SINI ===
-            saldoAwal = tempSaldo; // Masukkan hasil perhitungan ke variabel saldoAwal
+            saldoAwal = tempSaldo; 
             runningSaldo = saldoAwal;
 
             if(filteredGroups.length === 0) {
-                const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
                 const monthText = monthNames[parseInt(selectedMonth)-1] + " " + selectedYear;
                 tbody.innerHTML = `<tr><td colspan="9" class="text-center py-6 text-slate-400">Tidak ada transaksi pada bulan ${monthText}.</td></tr>`;
                 
-                // Update Kartu Ringkasan meskipun tidak ada transaksi di bulan ini
                 if(document.getElementById('adm-saldo-awal')) document.getElementById('adm-saldo-awal').innerText = formatRp(saldoAwal);
                 if(document.getElementById('adm-total-masuk')) document.getElementById('adm-total-masuk').innerText = 'Rp 0';
                 if(document.getElementById('adm-total-keluar')) document.getElementById('adm-total-keluar').innerText = 'Rp 0';
@@ -2960,7 +2963,6 @@
                 return;
             }
 
-            // 2. Proses Filtered Groups untuk bulan berjalan
             filteredGroups.forEach(group => {
                 runningSaldo = runningSaldo + group.totalPemasukan - group.totalPengeluaran;
                 totalMasuk += group.totalPemasukan;
@@ -3002,7 +3004,6 @@
                 `;
             });
 
-            // 3. Update Kartu Ringkasan Di Bagian Paling Bawah
             let saldoAkhir = saldoAwal + totalMasuk - totalKeluar;
             
             if(document.getElementById('adm-saldo-awal')) document.getElementById('adm-saldo-awal').innerText = formatRp(saldoAwal);
@@ -3010,7 +3011,6 @@
             if(document.getElementById('adm-total-keluar')) document.getElementById('adm-total-keluar').innerText = formatRp(totalKeluar);
             if(document.getElementById('adm-saldo-akhir')) document.getElementById('adm-saldo-akhir').innerText = formatRp(saldoAkhir);
 
-            // Update Footer
             if(document.getElementById('adm-foot-masuk')) document.getElementById('adm-foot-masuk').innerText = formatRp(totalMasuk);
             if(document.getElementById('adm-foot-keluar')) document.getElementById('adm-foot-keluar').innerText = formatRp(totalKeluar);
         }
@@ -3021,7 +3021,6 @@
             document.body.style.overflow = 'auto';
         }
 
-        // Fungsi Helper untuk Edit Dropdown
         function updateKategoriOptionsEdit(selectedVal) {
             const jenis = document.querySelector('input[name="editJenisTrx"]:checked').value;
             const kategoriSelect = document.getElementById('edit-kategori');
@@ -3054,29 +3053,22 @@
             }
         }
         
-        // Cari Nama saat Edit
-        function cariNamaRumahEdit() {
+        async function cariNamaRumahEdit() {
             const noRumah = document.getElementById('edit-norumah').value.trim();
             if (noRumah.length < 2) return;
-            google.script.run
-                .withSuccessHandler(function(res) {
-                    document.getElementById('edit-nama').value = res.nama || 'Data tidak ditemukan';
-                })
-                .getDataRumah(noRumah);
+            try {
+                const response = await fetch(`${API_URL}?action=getDataRumah&noRumah=${encodeURIComponent(noRumah)}`);
+                const res = await response.json();
+                document.getElementById('edit-nama').value = res.nama || 'Data tidak ditemukan';
+            } catch (err) {
+                console.error("Gagal cari rumah:", err);
+            }
         }
 
-        // ==========================================
-        // VARIABEL GLOBAL UNTUK KONFIRMASI HAPUS
-        // ==========================================
         let pendingDeleteId = null;
 
-        // FUNGSI UNTUK MEMBUKA KONFIRMASI
         function hapusTransaksi(id) {
-            // Pastikan ID diubah menjadi string dan tidak null
             pendingDeleteId = String(id || '').trim(); 
-            
-            console.log("ID yang diterima tombol hapus:", pendingDeleteId);
-
             if (!pendingDeleteId || pendingDeleteId === '') {
                 showNotification("Error", "ID Transaksi tidak valid!", "error");
                 return;
@@ -3084,14 +3076,13 @@
 
             const modal = document.getElementById('confirm-modal');
             if (modal) {
-                document.getElementById('confirm-message').innerText = "Apakah Anda yakin ingin menghapus transaksi dengan ID " + pendingDeleteId + "?\nData ini akan dihapus permanen dari Spreadsheet.";
+                document.getElementById('confirm-message').innerText = "Apakah Anda yakin ingin menghapus transaksi dengan ID " + pendingDeleteId + "?\nData ini akan dihapus permanen dari server.";
                 modal.classList.remove('hidden');
                 modal.classList.add('flex');
                 document.body.style.overflow = 'hidden';
             }
         }
 
-        // FUNGSI UNTUK MENUTUP KONFIRMASI
         function closeConfirmModal() {
             const modal = document.getElementById('confirm-modal');
             modal.classList.add('hidden');
@@ -3099,58 +3090,46 @@
             document.body.style.overflow = 'auto';
             pendingDeleteId = null;
             
-            // --- Tambahan Baru ---
             deleteBankRowIdx = null; 
             const btnYa = modal.querySelector('button.bg-rose-600');
-            if(btnYa) btnYa.onclick = executeDelete; // Kembalikan ke fungsi hapus transaksi normal
+            if(btnYa) btnYa.onclick = executeDelete; 
         }
 
-        // FUNGSI UNTUK MENGEKSEKUSI PENGHAPUSAN (SUDAH DIPERBAIKI)
-        function executeDelete() {
+        async function executeDelete() {
             if (!pendingDeleteId || pendingDeleteId === '') {
                 showNotification("Gagal", "ID Transaksi tidak ditemukan.", "error");
                 return;
             }
             
-            // 1. Simpan ID ke variabel lokal agar tidak hilang
             const idYangAkanDihapus = pendingDeleteId;
-
-            // 2. Tutup pop-up konfirmasi (ini akan mereset pendingDeleteId jadi null)
             closeConfirmModal(); 
 
-            // 3. Tampilkan status loading di tabel
             const tbody = document.getElementById('adm-table-body');
             if(tbody) tbody.innerHTML = `<tr><td colspan="9" class="text-center py-6 text-slate-400"><i class="fa-solid fa-circle-notch fa-spin text-blue-500 text-2xl mb-2"></i><br>Sedang menghapus data...</td></tr>`;
 
-            // 4. Kirim perintah hapus ke backend menggunakan ID yang sudah diamankan
-            google.script.run
-                .withSuccessHandler(function(res) {
-                    if (res.success) {
-                        showNotification("Berhasil", res.message, "success");
-                    } else {
-                        showNotification("Gagal", res.message, "error");
-                    }
-                    loadAdminBukuKas(); 
-                })
-                .withFailureHandler(function(err) {
-                    showNotification("Koneksi Error", "Gagal menghapus: " + err.message, "error");
-                    loadAdminBukuKas();
-                })
-                .deleteTransactionByID(idYangAkanDihapus); // <-- Menggunakan variabel baru
+            try {
+                const response = await fetch(`${API_URL}?action=deleteTransactionByID&id=${encodeURIComponent(idYangAkanDihapus)}`);
+                const res = await response.json();
+
+                if (res.success) {
+                    showNotification("Berhasil", res.message, "success");
+                } else {
+                    showNotification("Gagal", res.message, "error");
+                }
+                loadAdminBukuKas(); 
+            } catch (err) {
+                showNotification("Koneksi Error", "Gagal menghapus: " + err.message, "error");
+                loadAdminBukuKas();
+            }
         }
 
-        // === FUNGSI BARU: Mengisi dropdown tahun secara otomatis dari data ===
         function populateAdminYearDropdown() {
             const yearDropdown = document.getElementById('adm-filter-tahun');
             if (!yearDropdown) return;
             
-            // Simpan tahun yang sedang dipilih pengguna (agar tidak reset saat refresh data)
             const currentVal = yearDropdown.value;
-            
-            // Kosongkan dropdown
             yearDropdown.innerHTML = '';
             
-            // Jika data kosong, berikan default tahun 2026
             if (!adminTrxData || adminTrxData.length === 0) {
                 const opt = document.createElement('option');
                 opt.value = "2026";
@@ -3160,23 +3139,20 @@
                 return;
             }
 
-            // 1. Kumpulkan semua tahun unik dari data transaksi
             const years = new Set();
             adminTrxData.forEach(trx => {
                 const parts = String(trx.tanggal).split('/');
                 if (parts.length === 3) {
                     const y = parts[2];
-                    if (y && y.length === 4) { // Pastikan format tahun 4 digit (YYYY)
+                    if (y && y.length === 4) { 
                         years.add(y);
                     }
                 }
             });
 
-            // 2. Urutkan tahun dari yang paling tua ke paling baru
             const sortedYears = Array.from(years).sort((a, b) => a - b);
 
             if (sortedYears.length === 0) {
-                // Fallback jika tidak ada tahun yang valid
                 const opt = document.createElement('option');
                 opt.value = "2026";
                 opt.innerText = "2026";
@@ -3185,7 +3161,6 @@
                 return;
             }
 
-            // 3. Tambahkan opsi ke dropdown
             sortedYears.forEach(y => {
                 const opt = document.createElement('option');
                 opt.value = y;
@@ -3193,9 +3168,6 @@
                 yearDropdown.appendChild(opt);
             });
 
-            // 4. Set pilihan default:
-            // - Jika pengguna sebelumnya memilih tahun tertentu dan tahun itu ada, gunakan itu.
-            // - Jika tidak, pilih tahun terbaru (paling akhir di array sortedYears).
             if (currentVal && sortedYears.includes(currentVal)) {
                 yearDropdown.value = currentVal;
             } else {
@@ -3210,7 +3182,6 @@
             const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
             const currentYear = String(now.getFullYear());
 
-            // Setup nilai default dropdown dashboard publik
             const dashMonth = document.getElementById('filter-bulan-dash');
             const dashYear = document.getElementById('filter-tahun-dash');
             if (dashMonth) dashMonth.value = currentMonth;
@@ -3219,12 +3190,8 @@
             const chartYear = document.getElementById('tahun-chart');
             if (chartYear) chartYear.value = currentYear;
             
-            // ==========================================
-            // LOGIKA CEK SESI SAAT HALAMAN DIMUAT (REFRESH)
-            // ==========================================
             const loginTime = sessionStorage.getItem('admin_login_time');
             if (loginTime && (Date.now() - parseInt(loginTime) <= 60 * 60 * 1000)) {
-                // Sesi masih valid, sembunyikan tampilan publik dan buka panel admin
                 document.querySelector('header').style.display = 'none';
                 document.getElementById('page-dashboard').classList.add('hidden');
                 document.getElementById('page-cek-status').classList.add('hidden');
@@ -3233,42 +3200,31 @@
                 const adminPage = document.getElementById('page-admin-dashboard');
                 if (adminPage) adminPage.classList.remove('hidden');
                 
-                // Tampilkan kembali nama admin
                 document.getElementById('admin-name-display').innerText = sessionStorage.getItem('admin_nama') || 'Admin';
                 document.getElementById('admin-role-display').innerText = sessionStorage.getItem('admin_jabatan') || 'Pengurus';
                 
                 loadAdminBukuKas();
             } else {
-                // Jika tidak ada sesi aktif, jalankan dashboard publik seperti biasa
                 loadDashboard(currentMonth, currentYear);
                 updateBarChart(); 
             }
 
-            // Reset timer saat user klik atau mengetik
             document.addEventListener('click', resetSessionTimer);
             document.addEventListener('keydown', resetSessionTimer);
             document.addEventListener('scroll', resetSessionTimer);
-
-            // Cek kedaluwarsa sesi setiap 30 detik
             setInterval(checkSession, 30000);
         });
       
-        // ==========================================
-        // LOGIKA TAB MENU ADMIN
-        // ==========================================
         function switchAdminTab(tabName) {
-            // Sembunyikan semua konten terlebih dahulu
             document.getElementById('content-buku-kas').classList.add('hidden');
             document.getElementById('content-rekap-tagihan').classList.add('hidden');
             document.getElementById('content-bukti-bank').classList.add('hidden');
             
-            // Matikan gaya warna (jadikan abu-abu) untuk semua tombol
             const inactiveClass = "pb-3 text-sm font-bold text-slate-400 hover:text-slate-700 border-b-2 border-transparent transition-colors";
             document.getElementById('tab-buku-kas').className = inactiveClass;
             document.getElementById('tab-rekap-tagihan').className = inactiveClass;
             document.getElementById('tab-bukti-bank').className = inactiveClass;
 
-            // Hidupkan tab dan konten yang dipilih
             const activeClass = "pb-3 text-sm font-bold text-blue-600 border-b-2 border-blue-600 transition-colors";
             
             if (tabName === 'buku-kas') {
@@ -3281,29 +3237,29 @@
             } else if (tabName === 'bukti-bank') {
                 document.getElementById('content-bukti-bank').classList.remove('hidden');
                 document.getElementById('tab-bukti-bank').className = activeClass;
-                loadBuktiBank(); // Tarik data riwayat bank
+                loadBuktiBank(); 
             }
         }
 
-        function loadRekapAdmin() {
+        async function loadRekapAdmin() {
             const bulan = document.getElementById('rekap-filter-bulan').value;
             const tahun = document.getElementById('rekap-filter-tahun').value || "2026";
             const tbody = document.getElementById('rekap-table-body');
             
             tbody.innerHTML = `<tr><td colspan="5" class="text-center py-10"><i class="fa-solid fa-circle-notch fa-spin text-blue-600 text-2xl"></i><br>Memuat checklist rekap...</td></tr>`;
             
-            google.script.run
-                .withSuccessHandler(function(res) {
-                    if (res.success) {
-                        renderTabelRekap(res.data, res.periode);
-                    } else {
-                        tbody.innerHTML = `<tr><td colspan="5" class="text-center py-6 text-rose-500 font-bold">Gagal memuat rekap: ${res.message}</td></tr>`;
-                    }
-                })
-                .withFailureHandler(function(err) {
-                    tbody.innerHTML = `<tr><td colspan="5" class="text-center py-6 text-rose-500 font-bold">Error koneksi: ${err.message}</td></tr>`;
-                })
-                .getRekapBulananAdmin(bulan, tahun);
+            try {
+                const response = await fetch(`${API_URL}?action=getRekapBulananAdmin&bulan=${bulan}&tahun=${tahun}`);
+                const res = await response.json();
+
+                if (res.success) {
+                    renderTabelRekap(res.data, res.periode);
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="5" class="text-center py-6 text-rose-500 font-bold">Gagal memuat rekap: ${res.message}</td></tr>`;
+                }
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center py-6 text-rose-500 font-bold">Error koneksi: ${err.message}</td></tr>`;
+            }
         }
 
         function renderTabelRekap(data, periode) {
@@ -3325,7 +3281,6 @@
                     badgeBayar = `<span class="bg-slate-100 text-slate-500 px-3 py-1 rounded-full text-[10px] font-bold">TIDAK WAJIB</span>`;
                 }
 
-                // Kita buat opsi dropdown dan langsung tandai 'selected' sesuai data dari backend
                 let selAktif = item.statusPenghuni === 'Aktif' ? 'selected' : '';
                 let selKosong = item.statusPenghuni === 'Kosong' ? 'selected' : '';
                 let selPengurus = item.statusPenghuni === 'Pengurus' ? 'selected' : '';
@@ -3348,20 +3303,21 @@
             });
         }
 
-        function ubahStatusPenghuni(periode, noRumah, statusBaru) {
+        async function ubahStatusPenghuni(periode, noRumah, statusBaru) {
             showNotification("Menyimpan...", `Mengubah status ${noRumah} menjadi ${statusBaru}`, "info");
-            google.script.run
-                .withSuccessHandler(function(res) {
-                    if (res.success) {
-                        showNotification("Berhasil", "Status penghuni diperbarui", "success");
-                        setTimeout(() => {
-                            loadRekapAdmin();
-                        }, 2000);
-                    } else {
-                        showNotification("Gagal", res.message, "error");
-                    }
-                })
-                .updateStatusPenghuni(periode, noRumah, statusBaru);
+            try {
+                const response = await fetch(`${API_URL}?action=updateStatusPenghuni&periode=${periode}&noRumah=${noRumah}&status=${statusBaru}`);
+                const res = await response.json();
+
+                if (res.success) {
+                    showNotification("Berhasil", "Status penghuni diperbarui", "success");
+                    setTimeout(() => { loadRekapAdmin(); }, 2000);
+                } else {
+                    showNotification("Gagal", res.message, "error");
+                }
+            } catch (err) {
+                showNotification("Error", "Gagal menghubungi server", "error");
+            }
         }
 
         // ==========================================
@@ -3371,14 +3327,13 @@
         let editBankOldLink = null;
         let deleteBankRowIdx = null;
 
-        // Memanggil data ke dalam form (Mode Edit)
         function editBuktiBank(rowIdx, periode, keterangan, link) {
             editBankRowIdx = rowIdx;
             editBankOldLink = link;
 
             document.getElementById('bank-periode').value = periode;
             document.getElementById('bank-keterangan').value = keterangan;
-            document.getElementById('bank-file').value = ''; // Kosongkan, biarkan user jika ingin upload baru
+            document.getElementById('bank-file').value = ''; 
 
             const btn = document.getElementById('btn-upload-bank');
             btn.innerHTML = 'Update Bukti Rekening';
@@ -3386,7 +3341,6 @@
             btn.classList.add('bg-amber-500', 'hover:bg-amber-600');
             btn.onclick = prosesUpdateBuktiBank;
             
-            // Tampilkan tombol batal edit
             if (!document.getElementById('btn-batal-bank')) {
                 const batalBtn = document.createElement('button');
                 batalBtn.id = 'btn-batal-bank';
@@ -3397,7 +3351,6 @@
             }
         }
 
-        // Kembali ke mode Simpan Baru
         function batalEditBuktiBank() {
             editBankRowIdx = null;
             editBankOldLink = null;
@@ -3415,7 +3368,6 @@
             if (batalBtn) batalBtn.remove();
         }
 
-        // Proses Eksekusi Update ke Server
         function prosesUpdateBuktiBank() {
             const periode = document.getElementById('bank-periode').value;
             const ket = document.getElementById('bank-keterangan').value;
@@ -3428,8 +3380,9 @@
             btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Mengupdate...';
             btn.disabled = true;
 
-            const sendUpdate = (fileBase64, fileName) => {
+            const sendUpdate = async (fileBase64, fileName) => {
                 const dataUpdate = {
+                    action: 'updateBuktiBank',
                     rowIdx: editBankRowIdx,
                     periode: periode,
                     keterangan: ket,
@@ -3438,22 +3391,26 @@
                     fileData: fileBase64
                 };
 
-                google.script.run
-                    .withSuccessHandler(function(res) {
-                        btn.innerHTML = originalText;
-                        btn.disabled = false;
-                        if (res.success) {
-                            showNotification("Berhasil", res.message, "success");
-                            batalEditBuktiBank(); // reset form
-                            loadBuktiBank(); // muat ulang tabel
-                        } else { showNotification("Gagal", res.message, "error"); }
-                    })
-                    .withFailureHandler(function(err) {
-                        btn.innerHTML = originalText;
-                        btn.disabled = false;
-                        showNotification("Error", err.message, "error");
-                    })
-                    .updateBuktiBank(dataUpdate);
+                try {
+                    const response = await fetch(API_URL, {
+                        method: 'POST',
+                        body: JSON.stringify(dataUpdate)
+                    });
+                    const res = await response.json();
+
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                    
+                    if (res.success) {
+                        showNotification("Berhasil", res.message, "success");
+                        batalEditBuktiBank(); 
+                        loadBuktiBank(); 
+                    } else { showNotification("Gagal", res.message, "error"); }
+                } catch (err) {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                    showNotification("Error", err.message, "error");
+                }
             };
 
             if (fileInput.files.length > 0) {
@@ -3462,47 +3419,44 @@
                 reader.onload = function(e) { sendUpdate(e.target.result.split(',')[1], file.name); };
                 reader.readAsDataURL(file);
             } else {
-                sendUpdate(null, null); // Tidak ada file baru, hanya update teks
+                sendUpdate(null, null); 
             }
         }
 
-        // Pop-up Konfirmasi Hapus Bank (Meminjam Modal yang sudah ada)
         function konfirmasiHapusBuktiBank(rowIdx) {
             deleteBankRowIdx = rowIdx;
             const modal = document.getElementById('confirm-modal');
             if (modal) {
                 document.getElementById('confirm-message').innerText = "Apakah Anda yakin ingin menghapus data bukti bank ini?";
                 const btnYa = modal.querySelector('button.bg-rose-600');
-                btnYa.onclick = eksekusiHapusBuktiBank; // Override fungsi delete agar mengarah ke fungsi Bank
+                btnYa.onclick = eksekusiHapusBuktiBank; 
                 modal.classList.remove('hidden');
                 modal.classList.add('flex');
             }
         }
 
-        // Proses Hapus Bank ke Server (Anti Null Bug)
-        function eksekusiHapusBuktiBank() {
-            // 1. Amankan nomor barisnya sebelum pop-up ditutup
+        async function eksekusiHapusBuktiBank() {
             const targetRow = deleteBankRowIdx; 
-            
-            // 2. Sekarang aman untuk menutup pop-up (yang mereset deleteBankRowIdx global jadi null)
             closeConfirmModal(); 
             
-            // 3. Render efek loading di tabel
             const tbody = document.getElementById('bank-table-body');
             tbody.innerHTML = `<tr><td colspan="4" class="text-center py-6 text-slate-400"><i class="fa-solid fa-circle-notch fa-spin text-blue-500 text-2xl mb-2"></i><br>Menghapus data...</td></tr>`;
 
-            // 4. Kirim perintah hapus ke server menggunakan variabel yang sudah diamankan
-            google.script.run
-                .withSuccessHandler(function(res) {
-                    if (res.success) { showNotification("Berhasil", res.message, "success"); } 
-                    else { showNotification("Gagal", res.message, "error"); }
-                    loadBuktiBank();
-                })
-                .deleteBuktiBank(targetRow); 
+            try {
+                const response = await fetch(`${API_URL}?action=deleteBuktiBank&rowIdx=${targetRow}`);
+                const res = await response.json();
+
+                if (res.success) { showNotification("Berhasil", res.message, "success"); } 
+                else { showNotification("Gagal", res.message, "error"); }
+                loadBuktiBank();
+            } catch (err) {
+                showNotification("Error", "Gagal menghapus data", "error");
+                loadBuktiBank();
+            }
         }
 
         // ==========================================
-        // FUNGSI UPLOAD & TAMPILKAN BUKTI BANK (DIPERBAIKI)
+        // FUNGSI UPLOAD & TAMPILKAN BUKTI BANK (POST)
         // ==========================================
         function uploadBuktiBank() {
             const periode = document.getElementById('bank-periode').value; 
@@ -3522,108 +3476,102 @@
             btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Mengupload...';
             btn.disabled = true;
             
-            reader.onload = function(e) {
+            reader.onload = async function(e) {
                 const base64String = e.target.result.split(',')[1];
                 
                 const dataUpload = {
+                    action: 'simpanBuktiBank',
                     periode: periode,
                     keterangan: ket,
                     fileName: file.name,
                     fileData: base64String
                 };
                 
-                google.script.run
-                    .withSuccessHandler(function(res) {
-                        btn.innerHTML = originalText;
-                        btn.disabled = false;
-                        if (res.success) {
-                            showNotification("Berhasil", res.message, "success");
-                            
-                            // --- PERBAIKAN: Reset SEMUA form input ---
-                            document.getElementById('bank-periode').value = '';
-                            document.getElementById('bank-file').value = '';
-                            document.getElementById('bank-keterangan').value = '';
-                            
-                            // Muat ulang tabel
-                            loadBuktiBank();
-                        } else {
-                            showNotification("Gagal", res.message, "error");
-                        }
-                    })
-                    .withFailureHandler(function(err) {
-                        btn.innerHTML = originalText;
-                        btn.disabled = false;
-                        showNotification("Error", err.message, "error");
-                    })
-                    .simpanBuktiBank(dataUpload);
+                try {
+                    const response = await fetch(API_URL, {
+                        method: 'POST',
+                        body: JSON.stringify(dataUpload)
+                    });
+                    const res = await response.json();
+
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+
+                    if (res.success) {
+                        showNotification("Berhasil", res.message, "success");
+                        document.getElementById('bank-periode').value = '';
+                        document.getElementById('bank-file').value = '';
+                        document.getElementById('bank-keterangan').value = '';
+                        loadBuktiBank();
+                    } else {
+                        showNotification("Gagal", res.message, "error");
+                    }
+                } catch (err) {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                    showNotification("Error", "Gagal mengunggah file.", "error");
+                }
             };
             reader.readAsDataURL(file);
         }
 
-        function loadBuktiBank() {
+        async function loadBuktiBank() {
             const tbody = document.getElementById('bank-table-body');
             tbody.innerHTML = '<tr><td colspan="4" class="text-center py-6 text-slate-400"><i class="fa-solid fa-circle-notch fa-spin text-blue-500 text-2xl mb-2"></i><br>Memuat riwayat laporan...</td></tr>';
             
-            google.script.run
-                .withSuccessHandler(function(res) {
-                    if (res.success) {
-                        tbody.innerHTML = '';
-                        if (res.data.length === 0) {
-                            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-6 text-slate-400">Belum ada bukti rekening yang diupload.</td></tr>';
-                            return;
-                        }
-                        
-                        res.data.forEach(item => {
-                            // Escape kutip untuk keamanan JS
-                            let ketAman = item.keterangan ? item.keterangan.replace(/'/g, "\\'") : '';
-                            
-                            tbody.innerHTML += `
-                                <tr class="hover:bg-slate-50 transition-colors">
-                                    <td class="py-3 px-4 font-bold text-blue-600">${item.periode}</td>
-                                    <td class="py-3 px-4 text-slate-600 font-medium">${item.keterangan || '-'}</td>
-                                    <td class="py-3 px-4 text-center text-slate-500 text-[10px] uppercase font-bold">${item.waktu}</td>
-                                    <td class="py-3 px-4 text-center">
-                                        <div class="flex items-center justify-center gap-2">
-                                            <a href="${item.link}" target="_blank" class="w-8 h-8 inline-flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-blue-100 hover:text-blue-600 transition-colors shadow-sm" title="Lihat Bukti">
-                                                <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
-                                            </a>
-                                            <button onclick="editBuktiBank(${item.rowIdx}, '${item.periode}', '${ketAman}', '${item.link}')" class="w-8 h-8 inline-flex items-center justify-center rounded-full bg-amber-50 text-amber-500 hover:bg-amber-100 hover:text-amber-600 transition-colors shadow-sm" title="Edit Data">
-                                                <i class="fa-solid fa-pen text-[10px]"></i>
-                                            </button>
-                                            <button onclick="konfirmasiHapusBuktiBank(${item.rowIdx})" class="w-8 h-8 inline-flex items-center justify-center rounded-full bg-rose-50 text-rose-500 hover:bg-rose-100 hover:text-rose-600 transition-colors shadow-sm" title="Hapus Data">
-                                                <i class="fa-solid fa-trash text-[10px]"></i>
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            `;
-                        });
-                    } else {
-                        tbody.innerHTML = `<tr><td colspan="4" class="text-center py-6 text-rose-500 font-bold">${res.message}</td></tr>`;
+            try {
+                const response = await fetch(`${API_URL}?action=getBuktiBankData`);
+                const res = await response.json();
+
+                if (res.success) {
+                    tbody.innerHTML = '';
+                    if (res.data.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-6 text-slate-400">Belum ada bukti rekening yang diupload.</td></tr>';
+                        return;
                     }
-                })
-                .withFailureHandler(function(err) {
-                    tbody.innerHTML = `<tr><td colspan="4" class="text-center py-6 text-rose-500 font-bold">Error: ${err.message}</td></tr>`;
-                })
-                .getBuktiBankData();
+                    
+                    res.data.forEach(item => {
+                        let ketAman = item.keterangan ? item.keterangan.replace(/'/g, "\\'") : '';
+                        tbody.innerHTML += `
+                            <tr class="hover:bg-slate-50 transition-colors">
+                                <td class="py-3 px-4 font-bold text-blue-600">${item.periode}</td>
+                                <td class="py-3 px-4 text-slate-600 font-medium">${item.keterangan || '-'}</td>
+                                <td class="py-3 px-4 text-center text-slate-500 text-[10px] uppercase font-bold">${item.waktu}</td>
+                                <td class="py-3 px-4 text-center">
+                                    <div class="flex items-center justify-center gap-2">
+                                        <a href="${item.link}" target="_blank" class="w-8 h-8 inline-flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-blue-100 hover:text-blue-600 transition-colors shadow-sm" title="Lihat Bukti">
+                                            <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                                        </a>
+                                        <button onclick="editBuktiBank(${item.rowIdx}, '${item.periode}', '${ketAman}', '${item.link}')" class="w-8 h-8 inline-flex items-center justify-center rounded-full bg-amber-50 text-amber-500 hover:bg-amber-100 hover:text-amber-600 transition-colors shadow-sm" title="Edit Data">
+                                            <i class="fa-solid fa-pen text-[10px]"></i>
+                                        </button>
+                                        <button onclick="konfirmasiHapusBuktiBank(${item.rowIdx})" class="w-8 h-8 inline-flex items-center justify-center rounded-full bg-rose-50 text-rose-500 hover:bg-rose-100 hover:text-rose-600 transition-colors shadow-sm" title="Hapus Data">
+                                            <i class="fa-solid fa-trash text-[10px]"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="4" class="text-center py-6 text-rose-500 font-bold">${res.message}</td></tr>`;
+                }
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="4" class="text-center py-6 text-rose-500 font-bold">Error koneksi ke server.</td></tr>`;
+            }
         }
 
-        // ==========================================
-        // FUNGSI GENERATE KETERANGAN OTOMATIS BUKTI BANK
-        // ==========================================
         function generateKeteranganBank() {
             const periodeVal = document.getElementById('bank-periode').value;
-            if (!periodeVal) return; // Jika kosong, batalkan
+            if (!periodeVal) return; 
             
-            // Format input type="month" adalah "YYYY-MM" (contoh: "2026-07")
             const parts = periodeVal.split('-'); 
             const year = parts[0];
-            const monthIdx = parseInt(parts[1], 10) - 1; // Kurangi 1 karena array dimulai dari 0
+            const monthIdx = parseInt(parts[1], 10) - 1; 
             
             const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
             const monthName = monthNames[monthIdx];
             
-            // Isi otomatis kolom keterangan
             const ketInput = document.getElementById('bank-keterangan');
             ketInput.value = `Rekening Koran Bulan ${monthName} ${year}`;
         }
