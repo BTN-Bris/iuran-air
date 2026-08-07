@@ -889,9 +889,9 @@
                     </div>
 
                     <!-- Keterangan Tambahan -->
-                    <div id="field-keterangan">
-                        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Keterangan</label>
-                        <input type="text" id="inp-keterangan" class="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-300 focus:bg-white transition-all" placeholder="Opsional...">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Upload Bukti <span class="text-slate-400 font-normal">(Biarkan kosong jika tidak mengganti bukti)</span></label>
+                        <input type="file" id="edit-bukti" accept="image/*,application/pdf" class="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-300 focus:bg-white transition-all file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
                     </div>
                 </div>
 
@@ -1191,7 +1191,9 @@
 
     <script>
 
-        const API_URL = "https://script.google.com/macros/s/AKfycbynlNbLOumwqkILEBEDWF5bHRJvCIjHAtLAmcN84TnvzuKFEmpTU4P6I7KY8TXbTGH9/exec";
+        const API_URL = "https://script.google.com/macros/s/AKfycbyO6sPZYeZ5bJ5JOZYqZWZlxqFRtHhbcwVdmkX0aamJ0spWcqO5CaP4UZkHToXVUKwG/exec";
+        // === LETAKKAN VARIABEL INI DI SINI (TEPAT DI BAWAH API_URL) ===
+        let editOldBuktiLink = '';
         // ==========================================
         // FUNGSI SESSION LOGIN (1 JAM)
         // ==========================================
@@ -2564,6 +2566,7 @@
         // ==========================================
         // FUNGSI EDIT TRANSAKSI (PERBAIKAN FETCH)
         // ==========================================
+        
         async function editTransaksi(id) {
             const modal = document.getElementById('trx-edit-modal');
             modal.classList.remove('hidden');
@@ -2572,7 +2575,6 @@
             document.getElementById('edit-id-display').innerText = "Memuat data ID: " + id + " ...";
         
             try {
-                // GUNAKAN FETCH, BUKAN google.script.run
                 const response = await fetch(`${API_URL}?action=getTransactionByID&id=${encodeURIComponent(id)}`);
                 const data = await response.json();
         
@@ -2581,6 +2583,9 @@
                     closeEditTransactionModal();
                     return;
                 }
+        
+                // Simpan link bukti lama
+                editOldBuktiLink = data.linkBukti || '';
         
                 // Isi Form Edit
                 document.getElementById('edit-id-induk').value = data.idInduk;
@@ -2592,19 +2597,45 @@
                 for (let r of radios) { if (r.value === data.jenis) r.checked = true; }
         
                 document.getElementById('edit-nominal').value = data.nominal;
-                document.getElementById('edit-keterangan').value = data.keterangan || '';
                 document.getElementById('edit-norumah').value = data.noRumah || '';
                 document.getElementById('edit-nama').value = data.nama || '';
                 document.getElementById('edit-bulan-awal').value = data.bulanAwal || '01';
                 document.getElementById('edit-bulan-akhir').value = data.bulanAkhir || '01';
                 document.getElementById('edit-iuran-bulan').value = data.iuranPerBulan || '';
         
+                // Reset file input agar tidak terisi data lama di browser
+                document.getElementById('edit-bukti').value = '';
+        
                 updateKategoriOptionsEdit(data.kategori);
                 toggleRumahFieldEdit();
+        
+                // Panggil logic hitung ulang nominal
+                hitungNominalOtomatisEdit();
+        
             } catch (err) {
                 showNotification("Koneksi Error", "Gagal mengambil data: " + err.message, "error");
                 closeEditTransactionModal();
             }
+        }
+
+        // ==========================================
+        // FUNGSI HITUNG OTOMATIS DI MODAL EDIT
+        // ==========================================
+        function hitungNominalOtomatisEdit() {
+            const kategori = document.getElementById('edit-kategori').value;
+            if (kategori !== 'Iuran Air') return;
+        
+            const bulanAwal = parseInt(document.getElementById('edit-bulan-awal').value);
+            const bulanAkhir = parseInt(document.getElementById('edit-bulan-akhir').value);
+            const iuranBulan = Number(document.getElementById('edit-iuran-bulan').value) || 0;
+        
+            let totalBulan = 0;
+            if (bulanAkhir >= bulanAwal) {
+                totalBulan = (bulanAkhir - bulanAwal) + 1;
+            } else {
+                totalBulan = (12 - bulanAwal + 1) + bulanAkhir;
+            }
+            document.getElementById('edit-nominal').value = totalBulan * iuranBulan;
         }
 
         function closeEditTransactionModal() {
@@ -2676,7 +2707,7 @@
         }
 
         // ==========================================
-        // KIRIM UPDATE KE SERVER (DENGAN NOTIFIKASI MODAL ELEGAN)
+        // KIRIM UPDATE KE SERVER (DENGAN UPLOAD BUKTI)
         // ==========================================
         async function updateTransaksi() {
             const idInduk = document.getElementById('edit-id-induk').value;
@@ -2686,52 +2717,71 @@
                 showNotification("Validasi", "Harap isi Tanggal dan Nominal dengan benar!", "warning");
                 return;
             }
-
+        
             const jenis = document.querySelector('input[name="editJenisTrx"]:checked').value;
             const kategori = document.getElementById('edit-kategori').value;
             const noRumah = document.getElementById('edit-norumah').value;
             const nama = document.getElementById('edit-nama').value;
-            const keterangan = document.getElementById('edit-keterangan').value;
-
-            const dataTransaksi = {
-                action: 'updateTransaction', // Disisipkan langsung di dalam data
-                idInduk: idInduk,
-                tanggal: tanggal,
-                jenis: jenis,
-                kategori: kategori,
-                noRumah: noRumah,
-                nama: nama,
-                nominal: Number(nominal),
-                keterangan: keterangan,
-                bulanAwal: document.getElementById('edit-bulan-awal').value,
-                bulanAkhir: document.getElementById('edit-bulan-akhir').value
-            };
-
-            const btn = document.querySelector('#trx-edit-modal button.bg-blue-600');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Mengupdate...';
-            btn.disabled = true;
-
-            try {
-                // Gunakan POST juga agar lebih aman
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    body: JSON.stringify(dataTransaksi)
-                });
-                const res = await response.json();
-
-                if (res.success) {
-                    showNotification("Berhasil", "Transaksi berhasil diperbarui!", "success");
-                    closeEditTransactionModal();
-                    loadAdminBukuKas(); 
-                } else {
-                    showNotification("Gagal", "Gagal memperbarui: " + res.message, "error");
+            const keterangan = '';
+        
+            // CEK FILE BUKTI BARU
+            const fileInput = document.getElementById('edit-bukti');
+            let fileData = null;
+            let fileName = null;
+        
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                fileName = file.name;
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    fileData = e.target.result.split(',')[1];
+                    sendUpdate(fileData, fileName);
+                };
+                reader.readAsDataURL(file);
+            } else {
+                sendUpdate(null, null);
+            }
+        
+            async function sendUpdate(fileBase64, fileNama) {
+                const dataTransaksi = {
+                    action: 'updateTransaction',
+                    idInduk: idInduk,
+                    tanggal: tanggal,
+                    jenis: jenis,
+                    kategori: kategori,
+                    noRumah: noRumah,
+                    nama: nama,
+                    nominal: Number(nominal),
+                    keterangan: keterangan,
+                    bulanAwal: document.getElementById('edit-bulan-awal').value,
+                    bulanAkhir: document.getElementById('edit-bulan-akhir').value,
+                    fileData: fileBase64,
+                    fileName: fileNama,
+                    linkBuktiLama: editOldBuktiLink // <--- KIRIM LINK BUKTI LAMA
+                };
+        
+                const btn = document.querySelector('#trx-edit-modal button.bg-blue-600');
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Mengupdate...';
+                btn.disabled = true;
+        
+                try {
+                    const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify(dataTransaksi) });
+                    const res = await response.json();
+        
+                    if (res.success) {
+                        showNotification("Berhasil", "Transaksi berhasil diperbarui!", "success");
+                        closeEditTransactionModal();
+                        loadAdminBukuKas(); 
+                    } else {
+                        showNotification("Gagal", "Gagal memperbarui: " + res.message, "error");
+                    }
+                } catch (err) {
+                    showNotification("Koneksi Error", "Error koneksi: " + err.message, "error");
+                } finally {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
                 }
-            } catch (err) {
-                showNotification("Koneksi Error", "Error koneksi: " + err.message, "error");
-            } finally {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
             }
         }
 
@@ -3216,6 +3266,10 @@
             document.addEventListener('keydown', resetSessionTimer);
             document.addEventListener('scroll', resetSessionTimer);
             setInterval(checkSession, 30000);
+            // === TEMPELKAN 4 BARIS INI DI SINI (PALING BAWAH) ===
+            document.getElementById('edit-bulan-awal').addEventListener('change', hitungNominalOtomatisEdit);
+            document.getElementById('edit-bulan-akhir').addEventListener('change', hitungNominalOtomatisEdit);
+            document.getElementById('edit-iuran-bulan').addEventListener('input', hitungNominalOtomatisEdit);
         });
       
         function switchAdminTab(tabName) {
