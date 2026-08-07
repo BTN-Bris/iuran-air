@@ -1191,7 +1191,7 @@
 
     <script>
 
-        const API_URL = "https://script.google.com/macros/s/AKfycbyd15f4PRMptLlCGc6dmyoHiRNhbhMr7eSZ43e4bM4Er8e1e0E4iKizpj7BzW480i0c/exec";
+        const API_URL = "https://script.google.com/macros/s/AKfycbynlNbLOumwqkILEBEDWF5bHRJvCIjHAtLAmcN84TnvzuKFEmpTU4P6I7KY8TXbTGH9/exec";
         // ==========================================
         // FUNGSI SESSION LOGIN (1 JAM)
         // ==========================================
@@ -2562,47 +2562,49 @@
         }
 
         // ==========================================
-        // FUNGSI EDIT TRANSAKSI (TANPA ALERT)
+        // FUNGSI EDIT TRANSAKSI (PERBAIKAN FETCH)
         // ==========================================
-        function editTransaksi(id) {
+        async function editTransaksi(id) {
             const modal = document.getElementById('trx-edit-modal');
             modal.classList.remove('hidden');
             modal.classList.add('flex');
             document.body.style.overflow = 'hidden';
             document.getElementById('edit-id-display').innerText = "Memuat data ID: " + id + " ...";
-
-            google.script.run
-                .withSuccessHandler(function(data) {
-                    if (data.error) {
-                        // GANTI ALERT DENGAN NOTIFIKASI MODAL
-                        showNotification("Error", data.error, "error");
-                        closeEditTransactionModal();
-                        return;
-                    }
-                    document.getElementById('edit-id-induk').value = data.idInduk;
-                    document.getElementById('edit-id-display').innerText = "ID Induk: " + data.idInduk;
-                    document.getElementById('edit-tanggal').value = data.tanggalRaw;
-                    
-                    const radios = document.getElementsByName('editJenisTrx');
-                    for (let r of radios) { if (r.value === data.jenis) r.checked = true; }
-
-                    document.getElementById('edit-nominal').value = data.nominal;
-                    document.getElementById('edit-keterangan').value = data.keterangan || '';
-                    document.getElementById('edit-norumah').value = data.noRumah || '';
-                    document.getElementById('edit-nama').value = data.nama || '';
-                    document.getElementById('edit-bulan-awal').value = data.bulanAwal || '01';
-                    document.getElementById('edit-bulan-akhir').value = data.bulanAkhir || '01';
-                    document.getElementById('edit-iuran-bulan').value = data.iuranPerBulan || '';
-
-                    updateKategoriOptionsEdit(data.kategori);
-                    toggleRumahFieldEdit();
-                })
-                .withFailureHandler(function(err) {
-                    // GANTI ALERT DENGAN NOTIFIKASI MODAL
-                    showNotification("Koneksi Error", "Gagal mengambil data: " + err.message, "error");
+        
+            try {
+                // GUNAKAN FETCH, BUKAN google.script.run
+                const response = await fetch(`${API_URL}?action=getTransactionByID&id=${encodeURIComponent(id)}`);
+                const data = await response.json();
+        
+                if (data.error) {
+                    showNotification("Error", data.error, "error");
                     closeEditTransactionModal();
-                })
-                .getTransactionByID(id);
+                    return;
+                }
+        
+                // Isi Form Edit
+                document.getElementById('edit-id-induk').value = data.idInduk;
+                document.getElementById('edit-id-display').innerText = "ID Induk: " + data.idInduk;
+                document.getElementById('edit-tanggal').value = data.tanggalRaw;
+                
+                // Set Radio Button Jenis
+                const radios = document.getElementsByName('editJenisTrx');
+                for (let r of radios) { if (r.value === data.jenis) r.checked = true; }
+        
+                document.getElementById('edit-nominal').value = data.nominal;
+                document.getElementById('edit-keterangan').value = data.keterangan || '';
+                document.getElementById('edit-norumah').value = data.noRumah || '';
+                document.getElementById('edit-nama').value = data.nama || '';
+                document.getElementById('edit-bulan-awal').value = data.bulanAwal || '01';
+                document.getElementById('edit-bulan-akhir').value = data.bulanAkhir || '01';
+                document.getElementById('edit-iuran-bulan').value = data.iuranPerBulan || '';
+        
+                updateKategoriOptionsEdit(data.kategori);
+                toggleRumahFieldEdit();
+            } catch (err) {
+                showNotification("Koneksi Error", "Gagal mengambil data: " + err.message, "error");
+                closeEditTransactionModal();
+            }
         }
 
         function closeEditTransactionModal() {
