@@ -1191,7 +1191,7 @@
 
     <script>
 
-        const API_URL = "https://script.google.com/macros/s/AKfycbyO6sPZYeZ5bJ5JOZYqZWZlxqFRtHhbcwVdmkX0aamJ0spWcqO5CaP4UZkHToXVUKwG/exec";
+        const API_URL = "https://script.google.com/macros/s/AKfycbzP-JguBgR9l3bRwUNGr1LidJhGfuGg-kBdHUtq2ccw_bIg_2vQIb7OOuX2CFawonNS/exec";
         // === LETAKKAN VARIABEL INI DI SINI (TEPAT DI BAWAH API_URL) ===
         let editOldBuktiLink = '';
         // ==========================================
@@ -2575,11 +2575,26 @@
             document.getElementById('edit-id-display').innerText = "Memuat data ID: " + id + " ...";
         
             try {
-                const response = await fetch(`${API_URL}?action=getTransactionByID&id=${encodeURIComponent(id)}`);
+                // Tampilkan URL yang akan dipanggil di Console (F12)
+                const url = `${API_URL}?action=getTransactionByID&id=${encodeURIComponent(id)}`;
+                console.log("🚀 Mengakses URL:", url);
+        
+                const response = await fetch(url);
                 const data = await response.json();
+        
+                // Tampilkan isi data yang diterima di Console (F12)
+                console.log("📦 Data diterima dari Server:", data);
         
                 if (data.error) {
                     showNotification("Error", data.error, "error");
+                    closeEditTransactionModal();
+                    return;
+                }
+        
+                // Pastikan data.idInduk benar-benar ada, jika tidak, berhenti
+                if (!data.idInduk) {
+                    console.error("❌ Server tidak mengirim idInduk!");
+                    showNotification("Error", "Data ID Induk kosong dari server", "error");
                     closeEditTransactionModal();
                     return;
                 }
@@ -2590,20 +2605,20 @@
                 // Isi Form Edit
                 document.getElementById('edit-id-induk').value = data.idInduk;
                 document.getElementById('edit-id-display').innerText = "ID Induk: " + data.idInduk;
-                document.getElementById('edit-tanggal').value = data.tanggalRaw;
+                document.getElementById('edit-tanggal').value = data.tanggalRaw || '';
                 
                 // Set Radio Button Jenis
                 const radios = document.getElementsByName('editJenisTrx');
                 for (let r of radios) { if (r.value === data.jenis) r.checked = true; }
         
-                document.getElementById('edit-nominal').value = data.nominal;
+                document.getElementById('edit-nominal').value = data.nominal || 0;
                 document.getElementById('edit-norumah').value = data.noRumah || '';
                 document.getElementById('edit-nama').value = data.nama || '';
                 document.getElementById('edit-bulan-awal').value = data.bulanAwal || '01';
                 document.getElementById('edit-bulan-akhir').value = data.bulanAkhir || '01';
                 document.getElementById('edit-iuran-bulan').value = data.iuranPerBulan || '';
         
-                // Reset file input agar tidak terisi data lama di browser
+                // Reset file input
                 document.getElementById('edit-bukti').value = '';
         
                 updateKategoriOptionsEdit(data.kategori);
@@ -2613,6 +2628,7 @@
                 hitungNominalOtomatisEdit();
         
             } catch (err) {
+                console.error("❌ Error saat mengambil data:", err);
                 showNotification("Koneksi Error", "Gagal mengambil data: " + err.message, "error");
                 closeEditTransactionModal();
             }
