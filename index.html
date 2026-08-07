@@ -1198,7 +1198,7 @@
 
     <script>
 
-        const API_URL = "https://script.google.com/macros/s/AKfycbw18WfYXtatUT9hi4SZbcjzorzFUuVeTKReiP-LynWBm7Ff8-hM_JM78-4dypJl5zpF/exec";
+        const API_URL = "https://script.google.com/macros/s/AKfycbz9xRS0PDQ_NiRNxwbQCrPVkPzVLnp5GFgeE7pPMsYizBowdM6GKeARTH9fcQKty85P/exec";
         // === LETAKKAN VARIABEL INI DI SINI (TEPAT DI BAWAH API_URL) ===
         let editOldBuktiLink = '';
         // ==========================================
@@ -1583,7 +1583,7 @@
                     displayKeterangan = `${baseString} (${group.bulanList.join(', ')})`;
                 }
 
-                let btnBukti = `<button onclick="lihatBukti('${group.keterangan}')" class="w-8 h-8 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 flex items-center justify-center transition-all mx-auto shadow-sm" title="Lihat Lampiran">
+                let btnBukti = `<button onclick="lihatBukti('${group.linkBukti}')" class="w-8 h-8 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 flex items-center justify-center transition-all mx-auto shadow-sm" title="Lihat Lampiran">
                                     <i class="fa-solid fa-file-invoice"></i>
                                 </button>`;
 
@@ -1890,7 +1890,13 @@
             printWindow.document.close();
         }
 
-        function lihatBukti(keterangan) { alert('Fitur lihat lampiran untuk transaksi: "' + keterangan + '"'); }
+        function lihatBukti(link) { 
+            if (link && link !== 'undefined' && link.startsWith('http')) {
+                window.open(link, '_blank'); // Buka PDF/Gambar di tab baru
+            } else {
+                showNotification("Informasi", "Tidak ada file lampiran/bukti yang diupload untuk transaksi ini.", "info");
+            }
+        }
         function openModal() { const modal = document.getElementById('trx-modal'); modal.classList.remove('hidden'); modal.classList.add('flex'); document.body.style.overflow = 'hidden'; applyFilter(); }
         function closeModal() { const modal = document.getElementById('trx-modal'); modal.classList.add('hidden'); modal.classList.remove('flex'); document.body.style.overflow = 'auto'; }
 
@@ -3053,6 +3059,9 @@
                 let badgeClass = isMasuk ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600';
                 
                 let actionButtons = `
+                    <button onclick="lihatBukti('${group.items[0].linkBukti}')" class="w-7 h-7 rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-100 flex items-center justify-center transition-all shadow-sm" title="Lihat Lampiran">
+                        <i class="fa-solid fa-file-invoice text-[10px]"></i>
+                    </button>
                     <button onclick="editTransaksi('${group.noBukti}')" class="w-7 h-7 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-100 flex items-center justify-center transition-all shadow-sm" title="Edit Transaksi">
                         <i class="fa-regular fa-pen-to-square text-[10px]"></i>
                     </button>
