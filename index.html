@@ -617,7 +617,7 @@
                                 <option value="05">Mei</option>
                                 <option value="06">Juni</option>
                                 <option value="07">Juli</option>
-                                <option value="08" selected>Agustus</option>
+                                <option value="08">Agustus</option>
                                 <option value="09">September</option>
                                 <option value="10">Oktober</option>
                                 <option value="11">November</option>
@@ -3266,7 +3266,8 @@
             const now = new Date();
             const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
             const currentYear = String(now.getFullYear());
-
+        
+            // --- SET FILTER DASHBOARD PUBLIK (Sudah ada) ---
             const dashMonth = document.getElementById('filter-bulan-dash');
             const dashYear = document.getElementById('filter-tahun-dash');
             if (dashMonth) dashMonth.value = currentMonth;
@@ -3274,21 +3275,25 @@
             
             const chartYear = document.getElementById('tahun-chart');
             if (chartYear) chartYear.value = currentYear;
+        
+            // --- TAMBAHKAN KODE INI UNTUK FILTER ADMIN ---
+            const admMonth = document.getElementById('adm-filter-bulan');
+            const admYear = document.getElementById('adm-filter-tahun');
+            if (admMonth) admMonth.value = currentMonth;
+            // Catatan: Opsi tahun admin di-generate oleh populateAdminYearDropdown() 
+            // saat data selesai dimuat, jadi pastikan tahunnya cocok.
+            // ---------------------------------------------
             
             const loginTime = sessionStorage.getItem('admin_login_time');
             if (loginTime && (Date.now() - parseInt(loginTime) <= 60 * 60 * 1000)) {
-                document.querySelector('header').style.display = 'none';
-                document.getElementById('page-dashboard').classList.add('hidden');
-                document.getElementById('page-cek-status').classList.add('hidden');
-                document.getElementById('page-pengumuman').classList.add('hidden');
+                // ... (kode login admin Anda yang sudah ada) ...
                 
-                const adminPage = document.getElementById('page-admin-dashboard');
-                if (adminPage) adminPage.classList.remove('hidden');
-                
-                document.getElementById('admin-name-display').innerText = sessionStorage.getItem('admin_nama') || 'Admin';
-                document.getElementById('admin-role-display').innerText = sessionStorage.getItem('admin_jabatan') || 'Pengurus';
-                
-                loadAdminBukuKas();
+                // Pastikan setelah data admin dimuat, dropdown di-set ke bulan ini
+                loadAdminBukuKas().then(() => {
+                     if (admMonth) admMonth.value = currentMonth;
+                     if (admYear) admYear.value = currentYear;
+                     renderAdminTable(); // Render ulang tabel dengan filter bulan ini
+                });
             } else {
                 loadDashboard(currentMonth, currentYear);
                 updateBarChart(); 
